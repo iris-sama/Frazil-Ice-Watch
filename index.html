@@ -8,13 +8,15 @@
 
   <style>
     :root{
-      /* Fire 7 + Silk chrome */
+      /* Fire 7 + Silk chrome (adjust if needed) */
       --safeTop: 84px;
       --safeBottom: 68px;
 
-      /* Make image bigger without hard-cropping */
-      --zoom: 1.20;    /* try 1.10–1.35 */
-      --panY: -6%;     /* move image up/down: negative = up, positive = down */
+      /* You want the WHOLE image visible: keep zoom at 1.00 */
+      --zoom: 1.00;
+
+      /* Nudge image UP to remove the extra black space above */
+      --panY: -2%;
 
       --bg: #000;
     }
@@ -34,26 +36,26 @@
       top: var(--safeTop);
       bottom: var(--safeBottom);
       background: var(--bg);
-      overflow: hidden; /* needed when zoom > 1 */
+      overflow: hidden;
     }
 
-    /* We wrap the image so we can scale & pan cleanly */
+    /* Wrapper lets us reposition the image slightly */
     .stage {
       width: 100%;
       height: 100%;
       display: flex;
-      align-items: center;
+      align-items: center;   /* center vertically */
       justify-content: center;
       transform: translateY(var(--panY)) scale(var(--zoom));
       transform-origin: center center;
     }
 
-    /* Keep full image proportions first; zoom handled by .stage */
+    /* Show the entire image (no cropping) */
     img {
       width: 100%;
       height: 100%;
-      object-fit: contain;      /* keep full image visible */
-      object-position: center;  /* center within stage */
+      object-fit: contain;
+      object-position: center;
       display: block;
     }
 
@@ -112,18 +114,22 @@
       status.textContent = `Chicago Weather Story • Tab ${idx + 1}`;
     }
 
+    // If a tab doesn't exist, skip it
     img.addEventListener("error", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
+    // Tap anywhere to advance
     document.body.addEventListener("click", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
+    // Initial load
     setTab(i);
 
+    // Auto-rotate
     setInterval(() => {
       i = (i + 1) % tabs.length;
       setTab(i);
