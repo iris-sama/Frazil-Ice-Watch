@@ -8,9 +8,9 @@
 
   <style>
     :root{
-      /* Defaults (we will allow calibrating these on-device) */
-      --safeTop: 70px;     /* Silk URL bar */
-      --safeBottom: 60px;  /* Fire nav bar */
+      /* HARD-CODED values that fit your Fire 7 in Silk */
+      --safeTop: 4px;
+      --safeBottom: 0px;
 
       --bg: #000;
       --panel: rgba(0,0,0,.55);
@@ -45,51 +45,49 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      transform: translateY(0px) scale(1.0); /* zoom 1.0, panY 0px */
     }
 
     img {
       width: 100%;
       height: 100%;
-      object-fit: contain;   /* show whole image by default */
+      object-fit: contain;   /* full image visible */
       object-position: center;
       display: block;
       user-select: none;
       -webkit-user-drag: none;
     }
 
-    /* Overlays */
+    /* Small note + status, tucked into bottom corners */
     .overlay {
       position: fixed;
-      color: var(--text);
-      font-size: 13px;
-      padding: 7px 10px;
-      border-radius: 12px;
-      background: var(--panel);
-      border: 1px solid var(--border);
+      color: rgba(255,255,255,.86);
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(0,0,0,.40);
+      border: 1px solid rgba(255,255,255,.14);
       user-select: none;
+      pointer-events: none;
       white-space: nowrap;
       z-index: 10;
-      pointer-events: none;
     }
-    .note { left: 10px; bottom: calc(var(--safeBottom) + 10px); }
-    .status { right: 10px; bottom: calc(var(--safeBottom) + 10px); font-variant-numeric: tabular-nums; }
-    .hud { right: 10px; top: calc(var(--safeTop) + 10px); font-size: 12px; }
+    .note { left: 8px; bottom: calc(var(--safeBottom) + 8px); }
+    .status { right: 8px; bottom: calc(var(--safeBottom) + 8px); font-variant-numeric: tabular-nums; }
 
-    /* Controls (tap-friendly) */
+    /* Controls (hidden by default; long-press toggles) */
     .controls {
       position: fixed;
-      left: 10px;
-      top: calc(var(--safeTop) + 10px);
-      display: flex;
+      left: 8px;
+      top: calc(var(--safeTop) + 8px);
+      display: none;                 /* hidden by default */
       flex-wrap: wrap;
       gap: 8px;
       z-index: 20;
-      pointer-events: auto; /* allow taps */
+      pointer-events: auto;
     }
-    . ALIGN {
-      display: flex;
-      gap: 8px;
-    }
+    .controls.on { display: flex; }
+
     .btn {
       font-size: 13px;
       padding: 9px 11px;
@@ -100,24 +98,6 @@
       cursor: pointer;
     }
     .btn:active { transform: scale(0.98); }
-
-    /* Optional calibration guide (shaded reserved areas) */
-    .guide {
-      position: fixed;
-      inset: 0;
-      z-index: 5;
-      pointer-events: none;
-      display: none;
-    }
-    .guide.on { display: block; }
-    .guide .top {
-      position: absolute; left: 0; right: 0; top: 0; height: var(--safeTop);
-      background: rgba(0, 255, 255, 0.18);
-    }
-    .guide .bottom {
-      position: absolute; left: 0; right: 0; bottom: 0; height: var(--safeBottom);
-      background: rgba(0, 255, 255, 0.18);
-    }
   </style>
 </head>
 
@@ -128,38 +108,21 @@
     </div>
   </div>
 
-  <div class="guide" id="guide">
-    <div class="top"></div>
-    <div class="bottom"></div>
-  </div>
+  <!-- Minimal overlays -->
+  <div class="overlay note">Tap to advance • Press & hold to show/hide controls</div>
+  <div class="overlay status" id="status">Chicago Weather Story • Tab 1</div>
 
-  <div class="controls">
+  <!-- Hidden controls (in case you ever need them again) -->
+  <div class="controls" id="controls">
     <button class="btn" id="zOut">Zoom -</button>
     <button class="btn" id="zIn">Zoom +</button>
     <button class="btn" id="up">Up</button>
     <button class="btn" id="down">Down</button>
-    <button class="btn" id="resetView">Reset View</button>
-
-    <div style="flex-basis:100%; height:0;"></div>
-
-    <button class="btn" id="topMinus">Top -</button>
-    <button class="btn" id="topPlus">Top +</button>
-    <button class="btn" id="botMinus">Bottom -</button>
-    <button class="btn" id="botPlus">Bottom +</button>
-    <button class="btn" id="toggleGuide">Guide</button>
-
-    <div style="flex-basis:100%; height:0;"></div>
-
-    <button class="btn" id="save">Save</button>
-    <button class="btn" id="clearSave">Clear Saved</button>
+    <button class="btn" id="reset">Reset</button>
   </div>
 
-  <div class="overlay note">Tap anywhere to advance • Adjust Top/Bottom if you see extra black bars</div>
-  <div class="overlay status" id="status">Chicago Weather Story • Tab 1</div>
-  <div class="overlay hud" id="hud">—</div>
-
   <script>
-    // ---------- Weather Story tabs ----------
+    // NWS Chicago (LOT) Weather Story tabs
     const tabs = [
       "https://www.weather.gov/images/lot/wxstory/Tab1FileL.png",
       "https://www.weather.gov/images/lot/wxstory/Tab2FileL.png",
@@ -171,81 +134,28 @@
     const ROTATE_SECONDS = 25;
     const CACHE_BUST_EVERY_MS = 60 * 1000;
 
-    const STORAGE_KEY = "wilmette_wxstory_display_v1";
-
     const img = document.getElementById("story");
     const status = document.getElementById("status");
     const stage = document.getElementById("stage");
-    const hud = document.getElementById("hud");
-    const guide = document.getElementById("guide");
+    const controls = document.getElementById("controls");
 
     let i = 0;
     let lastBust = 0;
 
-    // ---------- View state (zoom/pan + safe areas) ----------
-    let zoom = 1.00;  // 1.00 = fit
-    let panY = 0;     // px
-    let safeTop = 70;     // px
-    let safeBottom = 60;  // px
+    // View state (kept, but defaults match your “perfect fit”)
+    let zoom = 1.00;
+    let panY = 0;
 
     const Z_STEP = 0.05;
     const P_STEP = 12;
     const Z_MIN = 0.70;
     const Z_MAX = 1.80;
 
-    const SAFE_STEP = 4;
-    const SAFE_MIN = 0;
-    const SAFE_MAX = 160; // generous upper bound
-
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-
-    function applyCSSVars(){
-      document.documentElement.style.setProperty("--safeTop", safeTop + "px");
-      document.documentElement.style.setProperty("--safeBottom", safeBottom + "px");
-    }
-
     function applyTransform(){
       stage.style.transform = `translateY(${panY}px) scale(${zoom})`;
     }
 
-    function updateHUD(){
-      hud.textContent =
-        `Zoom ${zoom.toFixed(2)} • PanY ${panY}px • Top ${safeTop}px • Bottom ${safeBottom}px`;
-    }
-
-    function applyAll(){
-      applyCSSVars();
-      applyTransform();
-      updateHUD();
-    }
-
-    // ---------- Persistence ----------
-    function loadSaved(){
-      try{
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if(!raw) return;
-        const s = JSON.parse(raw);
-
-        if(typeof s.zoom === "number") zoom = clamp(s.zoom, Z_MIN, Z_MAX);
-        if(typeof s.panY === "number") panY = s.panY;
-
-        if(typeof s.safeTop === "number") safeTop = clamp(s.safeTop, SAFE_MIN, SAFE_MAX);
-        if(typeof s.safeBottom === "number") safeBottom = clamp(s.safeBottom, SAFE_MIN, SAFE_MAX);
-      } catch(e){
-        // ignore
-      }
-    }
-
-    function saveNow(){
-      const s = { zoom, panY, safeTop, safeBottom };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-    }
-
-    function clearSaved(){
-      localStorage.removeItem(STORAGE_KEY);
-    }
-
-    // ---------- Tabs ----------
     function setTab(idx) {
       const now = Date.now();
       const bust = (now - lastBust > CACHE_BUST_EVERY_MS)
@@ -255,100 +165,63 @@
       status.textContent = `Chicago Weather Story • Tab ${idx + 1}`;
     }
 
+    // Skip missing tabs gracefully
     img.addEventListener("error", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Tap anywhere (not buttons) to advance
+    // Tap to advance (but ignore taps on buttons if controls are visible)
     document.body.addEventListener("click", (e) => {
       if (e.target && e.target.classList && e.target.classList.contains("btn")) return;
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // ---------- Controls ----------
-    function stop(e){ e.preventDefault(); e.stopPropagation(); }
+    // Press & hold to toggle controls
+    let holdTimer = null;
+    document.body.addEventListener("touchstart", () => {
+      holdTimer = setTimeout(() => {
+        controls.classList.toggle("on");
+      }, 550);
+    }, {passive:true});
+    document.body.addEventListener("touchend", () => {
+      if (holdTimer) clearTimeout(holdTimer);
+    });
 
+    // Controls (only used if you toggle them on)
     document.getElementById("zIn").addEventListener("click", (e) => {
-      stop(e);
+      e.preventDefault(); e.stopPropagation();
       zoom = clamp(zoom + Z_STEP, Z_MIN, Z_MAX);
-      applyAll();
+      applyTransform();
     });
-
     document.getElementById("zOut").addEventListener("click", (e) => {
-      stop(e);
+      e.preventDefault(); e.stopPropagation();
       zoom = clamp(zoom - Z_STEP, Z_MIN, Z_MAX);
-      applyAll();
+      applyTransform();
     });
-
     document.getElementById("up").addEventListener("click", (e) => {
-      stop(e);
+      e.preventDefault(); e.stopPropagation();
       panY -= P_STEP;
-      applyAll();
+      applyTransform();
     });
-
     document.getElementById("down").addEventListener("click", (e) => {
-      stop(e);
+      e.preventDefault(); e.stopPropagation();
       panY += P_STEP;
-      applyAll();
+      applyTransform();
     });
-
-    document.getElementById("resetView").addEventListener("click", (e) => {
-      stop(e);
+    document.getElementById("reset").addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
       zoom = 1.00;
       panY = 0;
-      applyAll();
+      applyTransform();
     });
 
-    document.getElementById("topPlus").addEventListener("click", (e) => {
-      stop(e);
-      safeTop = clamp(safeTop + SAFE_STEP, SAFE_MIN, SAFE_MAX);
-      applyAll();
-    });
-
-    document.getElementById("topMinus").addEventListener("click", (e) => {
-      stop(e);
-      safeTop = clamp(safeTop - SAFE_STEP, SAFE_MIN, SAFE_MAX);
-      applyAll();
-    });
-
-    document.getElementById("botPlus").addEventListener("click", (e) => {
-      stop(e);
-      safeBottom = clamp(safeBottom + SAFE_STEP, SAFE_MIN, SAFE_MAX);
-      applyAll();
-    });
-
-    document.getElementById("botMinus").addEventListener("click", (e) => {
-      stop(e);
-      safeBottom = clamp(safeBottom - SAFE_STEP, SAFE_MIN, SAFE_MAX);
-      applyAll();
-    });
-
-    document.getElementById("toggleGuide").addEventListener("click", (e) => {
-      stop(e);
-      guide.classList.toggle("on");
-    });
-
-    document.getElementById("save").addEventListener("click", (e) => {
-      stop(e);
-      saveNow();
-      hud.textContent = hud.textContent + " • SAVED";
-      setTimeout(updateHUD, 1200);
-    });
-
-    document.getElementById("clearSave").addEventListener("click", (e) => {
-      stop(e);
-      clearSaved();
-      hud.textContent = "Saved settings cleared (reload to default)";
-      setTimeout(updateHUD, 1400);
-    });
-
-    // ---------- Init ----------
-    loadSaved();
-    applyAll();
+    // Init
+    applyTransform();
     setTab(i);
 
+    // Auto-rotate
     setInterval(() => {
       i = (i + 1) % tabs.length;
       setTab(i);
