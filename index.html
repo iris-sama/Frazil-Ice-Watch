@@ -8,11 +8,14 @@
 
   <style>
     :root{
-      /* Fire 7 + Silk chrome (adjust if needed) */
-      --safeTop: 84px;
-      --safeBottom: 68px;
+      /* Defaults (we will allow calibrating these on-device) */
+      --safeTop: 70px;     /* Silk URL bar */
+      --safeBottom: 60px;  /* Fire nav bar */
 
       --bg: #000;
+      --panel: rgba(0,0,0,.55);
+      --border: rgba(255,255,255,.18);
+      --text: rgba(255,255,255,.90);
     }
 
     html, body {
@@ -34,7 +37,6 @@
       overflow: hidden;
     }
 
-    /* Stage that we zoom/pan */
     .stage {
       width: 100%;
       height: 100%;
@@ -48,29 +50,29 @@
     img {
       width: 100%;
       height: 100%;
-      object-fit: contain;   /* base is "show whole image" */
+      object-fit: contain;   /* show whole image by default */
       object-position: center;
       display: block;
       user-select: none;
       -webkit-user-drag: none;
     }
 
-    /* Info overlays */
-    .note, .status, .hud {
+    /* Overlays */
+    .overlay {
       position: fixed;
-      color: rgba(255,255,255,.88);
+      color: var(--text);
       font-size: 13px;
-      padding: 6px 10px;
-      border-radius: 10px;
-      background: rgba(0,0,0,.45);
-      border: 1px solid rgba(255,255,255,.15);
+      padding: 7px 10px;
+      border-radius: 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
       user-select: none;
-      pointer-events: none;
       white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
     }
-
     .note { left: 10px; bottom: calc(var(--safeBottom) + 10px); }
-    .status { right: 10px; bottom: calc(var(--safeBottom) + 10px); }
+    .status { right: 10px; bottom: calc(var(--safeBottom) + 10px); font-variant-numeric: tabular-nums; }
     .hud { right: 10px; top: calc(var(--safeTop) + 10px); font-size: 12px; }
 
     /* Controls (tap-friendly) */
@@ -79,22 +81,43 @@
       left: 10px;
       top: calc(var(--safeTop) + 10px);
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
-      z-index: 5;
+      z-index: 20;
+      pointer-events: auto; /* allow taps */
+    }
+    . ALIGN {
+      display: flex;
+      gap: 8px;
     }
     .btn {
       font-size: 13px;
-      padding: 8px 10px;
+      padding: 9px 11px;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.18);
-      background: rgba(0,0,0,.55);
-      color: rgba(255,255,255,.9);
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
       cursor: pointer;
     }
     .btn:active { transform: scale(0.98); }
 
-    /* Keep controls above safe area overlays */
-    .btn small { opacity: .8; font-size: 11px; }
+    /* Optional calibration guide (shaded reserved areas) */
+    .guide {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      display: none;
+    }
+    .guide.on { display: block; }
+    .guide .top {
+      position: absolute; left: 0; right: 0; top: 0; height: var(--safeTop);
+      background: rgba(0, 255, 255, 0.18);
+    }
+    .guide .bottom {
+      position: absolute; left: 0; right: 0; bottom: 0; height: var(--safeBottom);
+      background: rgba(0, 255, 255, 0.18);
+    }
   </style>
 </head>
 
@@ -105,19 +128,38 @@
     </div>
   </div>
 
+  <div class="guide" id="guide">
+    <div class="top"></div>
+    <div class="bottom"></div>
+  </div>
+
   <div class="controls">
     <button class="btn" id="zOut">Zoom -</button>
     <button class="btn" id="zIn">Zoom +</button>
     <button class="btn" id="up">Up</button>
     <button class="btn" id="down">Down</button>
-    <button class="btn" id="reset">Reset</button>
+    <button class="btn" id="resetView">Reset View</button>
+
+    <div style="flex-basis:100%; height:0;"></div>
+
+    <button class="btn" id="topMinus">Top -</button>
+    <button class="btn" id="topPlus">Top +</button>
+    <button class="btn" id="botMinus">Bottom -</button>
+    <button class="btn" id="botPlus">Bottom +</button>
+    <button class="btn" id="toggleGuide">Guide</button>
+
+    <div style="flex-basis:100%; height:0;"></div>
+
+    <button class="btn" id="save">Save</button>
+    <button class="btn" id="clearSave">Clear Saved</button>
   </div>
 
-  <div class="note">Tap anywhere to advance • Use buttons to zoom/pan</div>
-  <div class="status" id="status">Chicago Weather Story • Tab 1</div>
-  <div class="hud" id="hud">Zoom 1.00 • PanY 0</div>
+  <div class="overlay note">Tap anywhere to advance • Adjust Top/Bottom if you see extra black bars</div>
+  <div class="overlay status" id="status">Chicago Weather Story • Tab 1</div>
+  <div class="overlay hud" id="hud">—</div>
 
   <script>
+    // ---------- Weather Story tabs ----------
     const tabs = [
       "https://www.weather.gov/images/lot/wxstory/Tab1FileL.png",
       "https://www.weather.gov/images/lot/wxstory/Tab2FileL.png",
@@ -129,29 +171,81 @@
     const ROTATE_SECONDS = 25;
     const CACHE_BUST_EVERY_MS = 60 * 1000;
 
+    const STORAGE_KEY = "wilmette_wxstory_display_v1";
+
     const img = document.getElementById("story");
     const status = document.getElementById("status");
     const stage = document.getElementById("stage");
     const hud = document.getElementById("hud");
+    const guide = document.getElementById("guide");
 
     let i = 0;
     let lastBust = 0;
 
-    // Manual view controls
-    let zoom = 1.00;     // 1.00 = true contain
-    let panY = 0;        // pixels
-    const Z_STEP = 0.05; // zoom step
-    const P_STEP = 12;   // pan step (px)
-    const Z_MIN = 0.80;
-    const Z_MAX = 1.60;
+    // ---------- View state (zoom/pan + safe areas) ----------
+    let zoom = 1.00;  // 1.00 = fit
+    let panY = 0;     // px
+    let safeTop = 70;     // px
+    let safeBottom = 60;  // px
 
-    function applyTransform(){
-      stage.style.transform = `translateY(${panY}px) scale(${zoom})`;
-      hud.textContent = `Zoom ${zoom.toFixed(2)} • PanY ${panY}px`;
-    }
+    const Z_STEP = 0.05;
+    const P_STEP = 12;
+    const Z_MIN = 0.70;
+    const Z_MAX = 1.80;
+
+    const SAFE_STEP = 4;
+    const SAFE_MIN = 0;
+    const SAFE_MAX = 160; // generous upper bound
 
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
+    function applyCSSVars(){
+      document.documentElement.style.setProperty("--safeTop", safeTop + "px");
+      document.documentElement.style.setProperty("--safeBottom", safeBottom + "px");
+    }
+
+    function applyTransform(){
+      stage.style.transform = `translateY(${panY}px) scale(${zoom})`;
+    }
+
+    function updateHUD(){
+      hud.textContent =
+        `Zoom ${zoom.toFixed(2)} • PanY ${panY}px • Top ${safeTop}px • Bottom ${safeBottom}px`;
+    }
+
+    function applyAll(){
+      applyCSSVars();
+      applyTransform();
+      updateHUD();
+    }
+
+    // ---------- Persistence ----------
+    function loadSaved(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return;
+        const s = JSON.parse(raw);
+
+        if(typeof s.zoom === "number") zoom = clamp(s.zoom, Z_MIN, Z_MAX);
+        if(typeof s.panY === "number") panY = s.panY;
+
+        if(typeof s.safeTop === "number") safeTop = clamp(s.safeTop, SAFE_MIN, SAFE_MAX);
+        if(typeof s.safeBottom === "number") safeBottom = clamp(s.safeBottom, SAFE_MIN, SAFE_MAX);
+      } catch(e){
+        // ignore
+      }
+    }
+
+    function saveNow(){
+      const s = { zoom, panY, safeTop, safeBottom };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    }
+
+    function clearSaved(){
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    // ---------- Tabs ----------
     function setTab(idx) {
       const now = Date.now();
       const bust = (now - lastBust > CACHE_BUST_EVERY_MS)
@@ -161,57 +255,100 @@
       status.textContent = `Chicago Weather Story • Tab ${idx + 1}`;
     }
 
-    // Skip missing tabs
     img.addEventListener("error", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Tap anywhere (not on buttons) to advance
+    // Tap anywhere (not buttons) to advance
     document.body.addEventListener("click", (e) => {
-      // Ignore clicks on buttons
       if (e.target && e.target.classList && e.target.classList.contains("btn")) return;
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Buttons
+    // ---------- Controls ----------
+    function stop(e){ e.preventDefault(); e.stopPropagation(); }
+
     document.getElementById("zIn").addEventListener("click", (e) => {
-      e.stopPropagation();
+      stop(e);
       zoom = clamp(zoom + Z_STEP, Z_MIN, Z_MAX);
-      applyTransform();
+      applyAll();
     });
 
     document.getElementById("zOut").addEventListener("click", (e) => {
-      e.stopPropagation();
+      stop(e);
       zoom = clamp(zoom - Z_STEP, Z_MIN, Z_MAX);
-      applyTransform();
+      applyAll();
     });
 
     document.getElementById("up").addEventListener("click", (e) => {
-      e.stopPropagation();
+      stop(e);
       panY -= P_STEP;
-      applyTransform();
+      applyAll();
     });
 
     document.getElementById("down").addEventListener("click", (e) => {
-      e.stopPropagation();
+      stop(e);
       panY += P_STEP;
-      applyTransform();
+      applyAll();
     });
 
-    document.getElementById("reset").addEventListener("click", (e) => {
-      e.stopPropagation();
+    document.getElementById("resetView").addEventListener("click", (e) => {
+      stop(e);
       zoom = 1.00;
       panY = 0;
-      applyTransform();
+      applyAll();
     });
 
-    // Initial
-    applyTransform();
+    document.getElementById("topPlus").addEventListener("click", (e) => {
+      stop(e);
+      safeTop = clamp(safeTop + SAFE_STEP, SAFE_MIN, SAFE_MAX);
+      applyAll();
+    });
+
+    document.getElementById("topMinus").addEventListener("click", (e) => {
+      stop(e);
+      safeTop = clamp(safeTop - SAFE_STEP, SAFE_MIN, SAFE_MAX);
+      applyAll();
+    });
+
+    document.getElementById("botPlus").addEventListener("click", (e) => {
+      stop(e);
+      safeBottom = clamp(safeBottom + SAFE_STEP, SAFE_MIN, SAFE_MAX);
+      applyAll();
+    });
+
+    document.getElementById("botMinus").addEventListener("click", (e) => {
+      stop(e);
+      safeBottom = clamp(safeBottom - SAFE_STEP, SAFE_MIN, SAFE_MAX);
+      applyAll();
+    });
+
+    document.getElementById("toggleGuide").addEventListener("click", (e) => {
+      stop(e);
+      guide.classList.toggle("on");
+    });
+
+    document.getElementById("save").addEventListener("click", (e) => {
+      stop(e);
+      saveNow();
+      hud.textContent = hud.textContent + " • SAVED";
+      setTimeout(updateHUD, 1200);
+    });
+
+    document.getElementById("clearSave").addEventListener("click", (e) => {
+      stop(e);
+      clearSaved();
+      hud.textContent = "Saved settings cleared (reload to default)";
+      setTimeout(updateHUD, 1400);
+    });
+
+    // ---------- Init ----------
+    loadSaved();
+    applyAll();
     setTab(i);
 
-    // Auto-rotate (keeps your chosen zoom/pan)
     setInterval(() => {
       i = (i + 1) % tabs.length;
       setTab(i);
