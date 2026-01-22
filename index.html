@@ -2,16 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <!-- Fire 7 + Silk: fixed landscape layout -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta http-equiv="refresh" content="1800"> <!-- hard refresh every 30 min -->
+  <meta http-equiv="refresh" content="1800">
   <title>NWS Chicago Weather Story — Fire 7</title>
 
   <style>
     :root{
-      /* Tuned for Fire 7 + Silk chrome */
-      --safeTop: 84px;     /* Silk URL bar */
-      --safeBottom: 68px; /* Fire OS nav bar */
+      /* Fire 7 + Silk chrome */
+      --safeTop: 84px;
+      --safeBottom: 68px;
+
+      /* Make image bigger without hard-cropping */
+      --zoom: 1.20;    /* try 1.10–1.35 */
+      --panY: -6%;     /* move image up/down: negative = up, positive = down */
+
       --bg: #000;
     }
 
@@ -23,7 +27,6 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
 
-    /* Usable display area */
     .safe {
       position: fixed;
       left: 0;
@@ -31,24 +34,31 @@
       top: var(--safeTop);
       bottom: var(--safeBottom);
       background: var(--bg);
+      overflow: hidden; /* needed when zoom > 1 */
+    }
+
+    /* We wrap the image so we can scale & pan cleanly */
+    .stage {
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
+      transform: translateY(var(--panY)) scale(var(--zoom));
+      transform-origin: center center;
     }
 
-    /* Weather Story image: fill screen */
+    /* Keep full image proportions first; zoom handled by .stage */
     img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      object-position: top center;
+      object-fit: contain;      /* keep full image visible */
+      object-position: center;  /* center within stage */
       display: block;
     }
 
-    /* Bottom-left note */
-    .note {
+    .note, .status {
       position: fixed;
-      left: 10px;
       bottom: calc(var(--safeBottom) + 10px);
       color: rgba(255,255,255,.85);
       font-size: 13px;
@@ -60,38 +70,22 @@
       pointer-events: none;
     }
 
-    /* Bottom-right status */
-    .status {
-      position: fixed;
-      right: 10px;
-      bottom: calc(var(--safeBottom) + 10px);
-      color: rgba(255,255,255,.85);
-      font-size: 13px;
-      padding: 6px 10px;
-      border-radius: 10px;
-      background: rgba(0,0,0,.45);
-      border: 1px solid rgba(255,255,255,.15);
-      user-select: none;
-      pointer-events: none;
-    }
+    .note { left: 10px; }
+    .status { right: 10px; }
   </style>
 </head>
 
 <body>
   <div class="safe">
-    <img id="story" alt="NWS Chicago Weather Story graphic" />
+    <div class="stage">
+      <img id="story" alt="NWS Chicago Weather Story graphic" />
+    </div>
   </div>
 
-  <div class="note">
-    Tap screen to advance to next Weather Story slide
-  </div>
-
-  <div class="status" id="status">
-    Chicago Weather Story • Tab 1
-  </div>
+  <div class="note">Tap screen to advance to next Weather Story slide</div>
+  <div class="status" id="status">Chicago Weather Story • Tab 1</div>
 
   <script>
-    // NWS Chicago (LOT) Weather Story tabs
     const tabs = [
       "https://www.weather.gov/images/lot/wxstory/Tab1FileL.png",
       "https://www.weather.gov/images/lot/wxstory/Tab2FileL.png",
@@ -100,8 +94,8 @@
       "https://www.weather.gov/images/lot/wxstory/Tab5FileL.png",
     ];
 
-    const ROTATE_SECONDS = 25;       // auto-advance interval
-    const CACHE_BUST_EVERY_MS = 60 * 1000; // prevent stale images
+    const ROTATE_SECONDS = 25;
+    const CACHE_BUST_EVERY_MS = 60 * 1000;
 
     const img = document.getElementById("story");
     const status = document.getElementById("status");
@@ -118,22 +112,18 @@
       status.textContent = `Chicago Weather Story • Tab ${idx + 1}`;
     }
 
-    // If a tab doesn't exist, skip it
     img.addEventListener("error", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Tap anywhere to advance
     document.body.addEventListener("click", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Initial load
     setTab(i);
 
-    // Auto-rotate
     setInterval(() => {
       i = (i + 1) % tabs.length;
       setTab(i);
