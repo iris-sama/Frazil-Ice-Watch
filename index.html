@@ -2,224 +2,180 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=1024, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta http-equiv="refresh" content="900"> <!-- hard refresh every 15 min -->
-  <title>Wilmette Intake – Frazil Watch</title>
+  <!-- Fire 7 + Silk: avoid zoom, keep predictable layout -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta http-equiv="refresh" content="1800"> <!-- hard refresh every 30 min -->
+  <title>NWS Chicago Weather Story — Fire 7 (Silk)</title>
+
   <style>
     :root{
-      --bg:#0b1220; --panel:#111b2e; --panel2:#0f182a;
-      --txt:#e8eefc; --muted:#aab8d6; --warn:#ffd166; --bad:#ff5c7a; --good:#3ddc97;
-      --border: rgba(255,255,255,.08);
+      /* Fire 7 + Silk defaults (tweak if needed) */
+      --safeTop: 92px;     /* Silk URL bar + top chrome */
+      --safeBottom: 74px;  /* Fire OS nav bar (Back/Home/Recents) / always visible */
+      --bg: #000;
+      --guide: rgba(0, 255, 255, 0.20);
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0; background:var(--bg); color:var(--txt);
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      width:1024px; height:600px; overflow:hidden;
     }
-    .wrap{display:grid; grid-template-rows: 58px 1fr; height:600px; padding:10px; gap:10px;}
-    header{
-      display:flex; align-items:center; justify-content:space-between;
-      padding:10px 14px; border:1px solid var(--border); border-radius:14px;
-      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+
+    /* The usable content area */
+    .safe {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--safeTop);
+      bottom: var(--safeBottom);
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    header .title{font-size:18px; font-weight:700; letter-spacing:.2px;}
-    header .sub{font-size:12px; color:var(--muted);}
-    header .right{display:flex; gap:10px; align-items:center;}
-    .pill{padding:6px 10px; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--muted);}
-    .grid{
-      display:grid;
-      grid-template-columns: 1.05fr .95fr;
-      grid-template-rows: 1fr 1fr;
-      gap:10px;
+
+    /* Show entire Weather Story image without cropping */
+    img {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
     }
-    .card{
-      border:1px solid var(--border);
-      border-radius:14px;
-      background:var(--panel);
-      padding:10px;
-      overflow:hidden;
+
+    /* Optional overlay status */
+    .overlay {
+      position: fixed;
+      left: 8px;
+      bottom: calc(var(--safeBottom) + 8px);
+      color: rgba(255,255,255,.75);
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 10px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.12);
+      user-select: none;
+      pointer-events: none;
     }
-    .card h2{margin:0 0 8px 0; font-size:14px; color:var(--muted); font-weight:700; letter-spacing:.2px;}
-    .row{display:flex; gap:10px; height:100%;}
-    .col{display:flex; flex-direction:column; gap:10px; height:100%;}
-    .links a{
-      color:var(--txt); text-decoration:none; display:inline-block;
-      padding:7px 10px; margin:4px 6px 0 0;
-      border:1px solid var(--border); border-radius:10px;
-      background:rgba(255,255,255,.03);
-      font-size:12px;
+
+    /* Sizing guide overlay (toggle with long-press) */
+    .guide {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: none;
     }
-    .links a:active{transform:scale(.99)}
-    iframe{
-      width:100%; height:100%;
-      border:1px solid var(--border);
-      border-radius:12px;
-      background:var(--panel2);
+    .guide.on { display: block; }
+    .guide .top {
+      position: absolute; left: 0; right: 0; top: 0; height: var(--safeTop);
+      background: var(--guide);
     }
-    .note{font-size:12px; color:var(--muted); line-height:1.25; margin-top:8px;}
-    .imgwrap{
-      height: calc(100% - 28px);
-      border:1px solid var(--border);
-      border-radius:12px;
-      background:var(--panel2);
-      display:flex; align-items:center; justify-content:center;
-      overflow:hidden;
+    .guide .bottom {
+      position: absolute; left: 0; right: 0; bottom: 0; height: var(--safeBottom);
+      background: var(--guide);
     }
-    img{width:100%; height:100%; object-fit:cover; display:block;}
-    .score{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:8px;
-      align-items:start;
+    .guide .label {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      color: rgba(255,255,255,.85);
+      font-size: 12px;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.12);
+      padding: 6px 8px;
+      border-radius: 10px;
     }
-    .check{
-      display:flex; gap:8px; align-items:flex-start;
-      padding:8px 10px; border:1px solid var(--border); border-radius:12px;
-      background:rgba(255,255,255,.03);
-      font-size:12px;
-    }
-    .check input{margin-top:2px; transform:scale(1.1);}
-    .result{
-      grid-column: 1 / -1;
-      display:flex; align-items:center; justify-content:space-between;
-      padding:10px 12px; border:1px solid var(--border); border-radius:12px;
-      background:rgba(255,255,255,.04);
-      font-size:13px;
-    }
-    .badge{font-weight:800;}
-    .badge.low{color:var(--good);}
-    .badge.watch{color:var(--warn);}
-    .badge.high{color:var(--bad);}
-    .small{font-size:11px; color:var(--muted);}
   </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <header>
-      <div>
-        <div class="title">Wilmette Intake — Frazil Watch</div>
-        <div class="sub">Single-page ops view for Fire 7 (1024×600). Auto refresh 15 min.</div>
-      </div>
-      <div class="right">
-        <div class="pill" id="clock">--:--</div>
-        <div class="pill" id="date">---</div>
-      </div>
-    </header>
-
-    <div class="grid">
-      <!-- TOP LEFT: NWS pages -->
-      <div class="card">
-        <h2>Atmosphere + Marine (links + optional embeds)</h2>
-        <div class="links">
-          <a href="https://forecast.weather.gov/MapClick.php?lat=42.08&lon=-87.73" target="_blank">Wilmette NWS Point Forecast</a>
-          <a href="https://marine.weather.gov/MapClick.php?zoneid=lmz740" target="_blank">Nearshore Marine (LMZ740)</a>
-          <a href="https://marine.weather.gov/MapClick.php?FcstType=kml&TextType=1&zoneid=LMZ740" target="_blank">LMZ740 Text Forecast (waves/kt)</a>
-          <a href="https://forecast.weather.gov/shmrn.php?mz=lmz741" target="_blank">Marine Synopsis / All zones</a>
-          <a href="https://www.weather.gov/lot/dssforecast" target="_blank">NWS LOT DSS Briefing</a>
-        </div>
-        <div class="note">
-          If the embeds below show blank, NWS is blocking iframe display on some devices/browsers.
-          Links above always work.
-        </div>
-        <div class="row" style="height: calc(100% - 78px); margin-top:8px;">
-          <div style="flex:1;">
-            <iframe loading="lazy" referrerpolicy="no-referrer"
-              src="https://forecast.weather.gov/MapClick.php?lat=42.08&lon=-87.73"></iframe>
-          </div>
-          <div style="flex:1;">
-            <iframe loading="lazy" referrerpolicy="no-referrer"
-              src="https://marine.weather.gov/MapClick.php?zoneid=lmz740"></iframe>
-          </div>
-        </div>
-      </div>
-
-      <!-- TOP RIGHT: GLSEA map -->
-      <div class="card">
-        <h2>Lake Michigan — GLSEA Surface Temp + Ice</h2>
-        <div class="imgwrap">
-          <img id="glsea" alt="GLSEA current ice + surface temperature map"
-               src="https://apps.glerl.noaa.gov/coastwatch/webdata/glsea/cur/glsea_cur_3.png">
-        </div>
-        <div class="note">Source: NOAA GLSEA (updates daily; sometimes more often). :contentReference[oaicite:7]{index=7}</div>
-      </div>
-
-      <!-- BOTTOM LEFT: Quick frazil checklist -->
-      <div class="card">
-        <h2>Frazil Quick Index (tap the conditions that apply)</h2>
-        <div class="score" id="scoreArea">
-          <label class="check"><input type="checkbox" data-points="1">Air ≤ <b>15°F</b> and falling</label>
-          <label class="check"><input type="checkbox" data-points="1">Wind ≥ <b>15–20 mph</b> (or ≥ 15 kt)</label>
-          <label class="check"><input type="checkbox" data-points="1">Sustained sub-freezing <b>≥ 24h</b></label>
-          <label class="check"><input type="checkbox" data-points="1">Marine forecast shows <b>waves ≥ 3 ft</b></label>
-          <label class="check"><input type="checkbox" data-points="1">GLSEA shows nearshore <b>ice / cold band</b></label>
-          <label class="check"><input type="checkbox" data-points="1">NWS marine hazards include <b>freezing spray/gales</b></label>
-
-          <div class="result">
-            <div>
-              <div>Index: <span id="pts">0</span> / 6</div>
-              <div class="small">0–1 LOW • 2–3 WATCH • 4–6 HIGH</div>
-            </div>
-            <div class="badge low" id="risk">LOW</div>
-          </div>
-        </div>
-        <div class="note">
-          This is a *decision aid*, not detection. Use it to decide when to increase intake checks / screen inspection frequency.
-        </div>
-      </div>
-
-      <!-- BOTTOM RIGHT: Marine hazards quick link (fast escalation) -->
-      <div class="card">
-        <h2>Fast Escalation Links</h2>
-        <div class="links">
-          <a href="https://forecast.weather.gov/showsigwx.php?warncounty=marine&warnzone=LMZ740" target="_blank">LMZ740 Warnings</a>
-          <a href="https://www.weather.gov/marine/lotmz" target="_blank">LOT Marine Zones (LMZ740/741/743/744)</a>
-          <a href="https://coastwatch.glerl.noaa.gov/satellite-data-products/great-lakes-surface-environmental-analysis-glsea/" target="_blank">What GLSEA is</a>
-        </div>
-        <div class="note">
-          Tip: if you later upgrade to a hosted dashboard with APIs, you can add live water temps (NOAA CO-OPS / USGS) and make this index automatic.
-        </div>
-        <div class="note small">
-          LMZ740 is “Winthrop Harbor to Wilmette Harbor” per NWS zone list. :contentReference[oaicite:8]{index=8}
-        </div>
-      </div>
-    </div>
+  <div class="safe">
+    <img id="story" alt="NWS Chicago Weather Story graphic" />
   </div>
 
-<script>
-  // Clock (America/Chicago)
-  function tick(){
-    const now = new Date();
-    const fmtTime = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', hour:'2-digit', minute:'2-digit' });
-    const fmtDate = new Intl.DateTimeFormat('en-US', { timeZone:'America/Chicago', weekday:'short', month:'short', day:'2-digit' });
-    document.getElementById('clock').textContent = fmtTime.format(now);
-    document.getElementById('date').textContent = fmtDate.format(now);
-  }
-  tick(); setInterval(tick, 1000 * 15);
+  <div class="overlay" id="status">Weather Story • Tab 1</div>
 
-  // Refresh GLSEA image every 5 minutes with cache-buster
-  function refreshGLSEA(){
-    const img = document.getElementById('glsea');
-    const base = "https://apps.glerl.noaa.gov/coastwatch/webdata/glsea/cur/glsea_cur_3.png";
-    img.src = base + "?t=" + Date.now();
-  }
-  setInterval(refreshGLSEA, 1000 * 60 * 5);
+  <div class="guide" id="guide">
+    <div class="top"></div>
+    <div class="bottom"></div>
+    <div class="label" id="label"></div>
+  </div>
 
-  // Manual frazil index
-  function recalc(){
-    const boxes = document.querySelectorAll('#scoreArea input[type="checkbox"]');
-    let pts = 0;
-    boxes.forEach(b => { if(b.checked) pts += Number(b.dataset.points || 0); });
-    document.getElementById('pts').textContent = pts;
+  <script>
+    // NWS Chicago (LOT) Weather Story tabs.
+    // If an office uses fewer tabs, missing images will error and be skipped.
+    const tabs = [
+      "https://www.weather.gov/images/lot/wxstory/Tab1FileL.png",
+      "https://www.weather.gov/images/lot/wxstory/Tab2FileL.png",
+      "https://www.weather.gov/images/lot/wxstory/Tab3FileL.png",
+      "https://www.weather.gov/images/lot/wxstory/Tab4FileL.png",
+      "https://www.weather.gov/images/lot/wxstory/Tab5FileL.png",
+    ];
 
-    const risk = document.getElementById('risk');
-    risk.classList.remove('low','watch','high');
-    if(pts <= 1){ risk.textContent = "LOW"; risk.classList.add('low'); }
-    else if(pts <= 3){ risk.textContent = "WATCH"; risk.classList.add('watch'); }
-    else { risk.textContent = "HIGH"; risk.classList.add('high'); }
-  }
-  document.querySelectorAll('#scoreArea input[type="checkbox"]').forEach(b => b.addEventListener('change', recalc));
-  recalc();
-</script>
+    const ROTATE_SECONDS = 25;       // slower is usually better for ops displays
+    const CACHE_BUST_EVERY_MS = 60 * 1000; // keep images fresh without hammering
+
+    const img = document.getElementById("story");
+    const status = document.getElementById("status");
+    const guide = document.getElementById("guide");
+    const label = document.getElementById("label");
+
+    let i = 0;
+    let lastBust = 0;
+
+    function cssVar(name){
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function updateGuideLabel(){
+      label.textContent =
+        `Sizing guide ON — safeTop=${cssVar("--safeTop")}  safeBottom=${cssVar("--safeBottom")}\n` +
+        `Long-press to toggle guide. Tap to advance. Auto-rotate ${ROTATE_SECONDS}s.`;
+    }
+
+    function setTab(idx) {
+      const now = Date.now();
+      const bust = (now - lastBust > CACHE_BUST_EVERY_MS) ? (lastBust = now, `?t=${now}`) : "";
+      img.src = tabs[idx] + bust;
+      status.textContent = `Weather Story • Tab ${idx + 1}`;
+    }
+
+    img.addEventListener("error", () => {
+      i = (i + 1) % tabs.length;
+      setTab(i);
+    });
+
+    // Tap = next tab (handy in the plant)
+    document.body.addEventListener("click", () => {
+      i = (i + 1) % tabs.length;
+      setTab(i);
+    });
+
+    // Long-press toggles sizing guide overlay
+    let pressTimer = null;
+    document.body.addEventListener("touchstart", () => {
+      pressTimer = setTimeout(() => {
+        guide.classList.toggle("on");
+        updateGuideLabel();
+      }, 650);
+    }, {passive:true});
+    document.body.addEventListener("touchend", () => {
+      if (pressTimer) clearTimeout(pressTimer);
+    });
+
+    // Initial
+    setTab(i);
+    updateGuideLabel();
+
+    // Rotate
+    setInterval(() => {
+      i = (i + 1) % tabs.length;
+      setTab(i);
+    }, ROTATE_SECONDS * 1000);
+  </script>
 </body>
 </html>
