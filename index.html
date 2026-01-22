@@ -2,18 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <!-- Fire 7 + Silk: avoid zoom, keep predictable layout -->
+  <!-- Fire 7 + Silk: fixed landscape layout -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta http-equiv="refresh" content="1800"> <!-- hard refresh every 30 min -->
-  <title>NWS Chicago Weather Story — Fire 7 (Silk)</title>
+  <title>NWS Chicago Weather Story — Fire 7</title>
 
   <style>
     :root{
-      /* Fire 7 + Silk defaults (tweak if needed) */
-      --safeTop: 92px;     /* Silk URL bar + top chrome */
-      --safeBottom: 74px;  /* Fire OS nav bar (Back/Home/Recents) / always visible */
+      /* Tuned for Fire 7 + Silk chrome */
+      --safeTop: 84px;     /* Silk URL bar */
+      --safeBottom: 68px; /* Fire OS nav bar */
       --bg: #000;
-      --guide: rgba(0, 255, 255, 0.20);
     }
 
     html, body {
@@ -24,7 +23,7 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
 
-    /* The usable content area */
+    /* Usable display area */
     .safe {
       position: fixed;
       left: 0;
@@ -37,57 +36,43 @@
       justify-content: center;
     }
 
-    /* Show entire Weather Story image without cropping */
+    /* Weather Story image: fill screen */
     img {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
-      object-fit: contain;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
       display: block;
     }
 
-    /* Optional overlay status */
-    .overlay {
+    /* Bottom-left note */
+    .note {
       position: fixed;
-      left: 8px;
-      bottom: calc(var(--safeBottom) + 8px);
-      color: rgba(255,255,255,.75);
-      font-size: 12px;
-      padding: 4px 8px;
+      left: 10px;
+      bottom: calc(var(--safeBottom) + 10px);
+      color: rgba(255,255,255,.85);
+      font-size: 13px;
+      padding: 6px 10px;
       border-radius: 10px;
-      background: rgba(0,0,0,.35);
-      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.15);
       user-select: none;
       pointer-events: none;
     }
 
-    /* Sizing guide overlay (toggle with long-press) */
-    .guide {
+    /* Bottom-right status */
+    .status {
       position: fixed;
-      inset: 0;
-      pointer-events: none;
-      display: none;
-    }
-    .guide.on { display: block; }
-    .guide .top {
-      position: absolute; left: 0; right: 0; top: 0; height: var(--safeTop);
-      background: var(--guide);
-    }
-    .guide .bottom {
-      position: absolute; left: 0; right: 0; bottom: 0; height: var(--safeBottom);
-      background: var(--guide);
-    }
-    .guide .label {
-      position: absolute;
-      left: 10px;
-      top: 10px;
+      right: 10px;
+      bottom: calc(var(--safeBottom) + 10px);
       color: rgba(255,255,255,.85);
-      font-size: 12px;
-      background: rgba(0,0,0,.45);
-      border: 1px solid rgba(255,255,255,.12);
-      padding: 6px 8px;
+      font-size: 13px;
+      padding: 6px 10px;
       border-radius: 10px;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.15);
+      user-select: none;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -97,17 +82,16 @@
     <img id="story" alt="NWS Chicago Weather Story graphic" />
   </div>
 
-  <div class="overlay" id="status">Weather Story • Tab 1</div>
+  <div class="note">
+    Tap screen to advance to next Weather Story slide
+  </div>
 
-  <div class="guide" id="guide">
-    <div class="top"></div>
-    <div class="bottom"></div>
-    <div class="label" id="label"></div>
+  <div class="status" id="status">
+    Chicago Weather Story • Tab 1
   </div>
 
   <script>
-    // NWS Chicago (LOT) Weather Story tabs.
-    // If an office uses fewer tabs, missing images will error and be skipped.
+    // NWS Chicago (LOT) Weather Story tabs
     const tabs = [
       "https://www.weather.gov/images/lot/wxstory/Tab1FileL.png",
       "https://www.weather.gov/images/lot/wxstory/Tab2FileL.png",
@@ -116,62 +100,40 @@
       "https://www.weather.gov/images/lot/wxstory/Tab5FileL.png",
     ];
 
-    const ROTATE_SECONDS = 25;       // slower is usually better for ops displays
-    const CACHE_BUST_EVERY_MS = 60 * 1000; // keep images fresh without hammering
+    const ROTATE_SECONDS = 25;       // auto-advance interval
+    const CACHE_BUST_EVERY_MS = 60 * 1000; // prevent stale images
 
     const img = document.getElementById("story");
     const status = document.getElementById("status");
-    const guide = document.getElementById("guide");
-    const label = document.getElementById("label");
 
     let i = 0;
     let lastBust = 0;
 
-    function cssVar(name){
-      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    }
-
-    function updateGuideLabel(){
-      label.textContent =
-        `Sizing guide ON — safeTop=${cssVar("--safeTop")}  safeBottom=${cssVar("--safeBottom")}\n` +
-        `Long-press to toggle guide. Tap to advance. Auto-rotate ${ROTATE_SECONDS}s.`;
-    }
-
     function setTab(idx) {
       const now = Date.now();
-      const bust = (now - lastBust > CACHE_BUST_EVERY_MS) ? (lastBust = now, `?t=${now}`) : "";
+      const bust = (now - lastBust > CACHE_BUST_EVERY_MS)
+        ? (lastBust = now, `?t=${now}`)
+        : "";
       img.src = tabs[idx] + bust;
-      status.textContent = `Weather Story • Tab ${idx + 1}`;
+      status.textContent = `Chicago Weather Story • Tab ${idx + 1}`;
     }
 
+    // If a tab doesn't exist, skip it
     img.addEventListener("error", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Tap = next tab (handy in the plant)
+    // Tap anywhere to advance
     document.body.addEventListener("click", () => {
       i = (i + 1) % tabs.length;
       setTab(i);
     });
 
-    // Long-press toggles sizing guide overlay
-    let pressTimer = null;
-    document.body.addEventListener("touchstart", () => {
-      pressTimer = setTimeout(() => {
-        guide.classList.toggle("on");
-        updateGuideLabel();
-      }, 650);
-    }, {passive:true});
-    document.body.addEventListener("touchend", () => {
-      if (pressTimer) clearTimeout(pressTimer);
-    });
-
-    // Initial
+    // Initial load
     setTab(i);
-    updateGuideLabel();
 
-    // Rotate
+    // Auto-rotate
     setInterval(() => {
       i = (i + 1) % tabs.length;
       setTab(i);
